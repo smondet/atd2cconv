@@ -60,23 +60,25 @@ let transform_expr ~self_name ?from expr =
           atom ~t:(t1 % t) ~source:(o1 % source) ()
         | `Inherit (loc, expr) ->
             go_deep expr >>= fun ~t ~source ~sink ->
-            let t = string " | " % t in 
+            let t = string " | " % t % newline in 
             atom ~t ~source:o1 ~sink:i1 ())
     >>= fun ~t ~source ~sink ->
-    let t = brakets (indent t) in
+    let t = brakets (newline % indent t) in
     atom ~t ~source:assert_false ~sink:assert_false ()
   | `Tvar (loc, var_name) ->
-    let with_mod_name v = 
-      string (String.capitalize var_name) % string "." % string v in
     let t = 
-      comment (fmt "Tvar %S" var_name) % newline
-      % with_mod_name "t" in
-    let source = with_mod_name "source" in
-    let sink = with_mod_name "sink" in
+      (* comment (fmt "Tvar %S" var_name) % newline *)
+      fmt "'%s" var_name in
+    let source = fmt "%s_source" var_name in
+    let sink =  fmt "%s_sink" var_name in
     atom ~t ~source ~sink ()
   | `Name (_, (loc, t_name, t_args), _) ->
     let with_mod_name v = 
       match t_name, from with
+      | "int", _ -> string "int"
+      | "float", _ -> string "float"
+      | "string", _ -> string "string"
+      | "list", _ -> string "list"
       | "abstract", Some f ->
         string (String.capitalize f) % string "." % string v
       | other, _ when other = self_name -> 
@@ -93,22 +95,31 @@ let transform_expr ~self_name ?from expr =
           ~sink:(i1 % comma % i2))
     >>= fun ~t ~source ~sink  ->
     let t = 
-      cmtf "`Name -> t_name: %s" t_name
+      commentf "t_name: %s" t_name % space
       % (if t = empty then empty else (parens t % space))
       % with_mod_name "t" in
     let source = with_mod_name "source" in
     let sink = with_mod_name "sink" in
     atom ~t ~source ~sink ()
+  | `Tuple (loc, [], annot) -> assert false
+  | `Tuple (loc, cell :: cell_list, annot) ->
+    let (_, expr, _) = cell in
+    let init = go_deep expr in
+    List.fold ~init cell_list ~f:(fun prev (_, expr, _) ->
+        prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
+        go_deep expr >>= fun ~t:t2 ~source:o2 ~sink:i2 ->
+        atom ()
+          ~t:(t1 % fmt " * " % t2)
+          ~source:(o1 % comma % o2)
+          ~sink:(i1 % comma % i2))
 
            (*
 | `Record of (loc * field list * annot)
-| `Tuple of (loc * cell list * annot)
 | `List of (loc * type_expr * annot)
 | `Option of (loc * type_expr * annot)
 | `Nullable of (loc * type_expr * annot)
 | `Shared of (loc * type_expr * annot)
 | `Wrap of (loc * type_expr * annot)
-| `Name of (loc * type_inst * annot)
   *)
   | other -> 
     not_implemented
@@ -139,7 +150,9 @@ let transform_moditem =
         fmt "type %s t = "
           (match param with
            | [] -> ""
-           | more -> sprintf "(%s)" (String.concat ", " param))
+           | more ->
+             sprintf "(%s)" (List.map param ~f:(sprintf "'%s") 
+                             |> String.concat ", "))
         % t
         % newline
         % fmt "let source = " % source % newline
@@ -182,13 +195,17 @@ three: [Int of int | Float of float];
 }
 type simple_variant = [
 | One
-| Two of simple_record
+| Two of (simple_record * int)
 | Rec of simple_variant
 | Double of (int * string) list
 ]
 type inheriting = [
   | One of int
   | inherit simple_variant
+]
+type ('a, 'b) result = [
+  | Ok of 'a
+  | Error of 'b
 ]
 "
 
