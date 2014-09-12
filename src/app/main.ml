@@ -112,10 +112,17 @@ let transform_expr ~self_name ?from expr =
           ~t:(t1 % fmt " * " % t2)
           ~source:(o1 % comma % o2)
           ~sink:(i1 % comma % i2))
-
+    >>= fun ~t ~source ~sink  ->
+    atom () ~t:(parens t) ~source ~sink
+  | `List (_, expr, _) ->
+    go_deep expr
+    >>= fun ~t ~source ~sink  ->
+    atom ()
+      ~t:(t % fmt " array")
+      ~source:(source )
+      ~sink:(sink )
            (*
 | `Record of (loc * field list * annot)
-| `List of (loc * type_expr * annot)
 | `Option of (loc * type_expr * annot)
 | `Nullable of (loc * type_expr * annot)
 | `Shared of (loc * type_expr * annot)
