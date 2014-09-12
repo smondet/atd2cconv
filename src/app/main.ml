@@ -30,9 +30,9 @@ let (+++) a b =
   atom ~t:(t % t2) ~source:(source % o2) ~sink:(sink % i2) ()
 
 let empty_atom = atom ()
-let not_implemented =
+let not_implemented msg =
   let open Out in
-  atom ~t:(string "unit" % space % comment (fmt "not implemented")) ()
+  atom ~t:(string "unit" % space % comment (fmt "not implemented: %s" msg)) ()
     ~source:(fmt "assert false")
     ~sink:(fmt "assert false")
 
@@ -60,7 +60,7 @@ let transform_expr ~self_name ?from expr =
           atom ~t:(t1 % t) ~source:(o1 % source) ()
         | `Inherit (loc, expr) ->
             go_deep expr >>= fun ~t ~source ~sink ->
-            let t = string " | " % t % newline in 
+            let t = t1 % string " | " % t % newline in 
             atom ~t ~source:o1 ~sink:i1 ())
     >>= fun ~t ~source ~sink ->
     let t = brakets (newline % indent t) in
@@ -121,15 +121,21 @@ let transform_expr ~self_name ?from expr =
       ~t:(t % fmt " array")
       ~source:(source )
       ~sink:(sink )
-           (*
-| `Record of (loc * field list * annot)
-| `Option of (loc * type_expr * annot)
-| `Nullable of (loc * type_expr * annot)
-| `Shared of (loc * type_expr * annot)
-| `Wrap of (loc * type_expr * annot)
-  *)
-  | other -> 
-    not_implemented
+  | `Option (_, expr, _) ->
+    go_deep expr
+    >>= fun ~t ~source ~sink  ->
+    atom ()
+      ~t:(t % fmt " option")
+      ~source:(source )
+      ~sink:(sink )
+  | `Nullable (_, expr, _) ->
+    not_implemented "Nullable"
+  | `Record (_, field_list, _) ->
+    not_implemented "Record"
+  | `Shared (_, expr, _) ->
+    not_implemented "Shared"
+  | `Wrap (_, expr, _) ->
+    not_implemented "Wrap"
   in
   go_deep expr
 
@@ -207,7 +213,7 @@ type simple_variant = [
 | Double of (int * string) list
 ]
 type inheriting = [
-  | One of int
+  | One_more of int option
   | inherit simple_variant
 ]
 type ('a, 'b) result = [
