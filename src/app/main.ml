@@ -10,10 +10,10 @@ let () =
     let (full_module, original_types) = atd in
     let (head, body) = full_module in
     let doc =
-      Atd2cconv.Out.(separate (newline)
-                       (List.map body ~f:Atd2cconv.transform_moditem)) in
+      SmartPrint.(separate (newline)
+                    (List.map body ~f:Atd2cconv.transform_moditem)) in
     let o = open_out output in
-    Atd2cconv.Out.to_out_channel 78 2 o doc;
+    SmartPrint.to_out_channel 78 2 o doc;
     close_out o;
     ()
   | other ->
