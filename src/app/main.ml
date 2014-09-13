@@ -11,7 +11,7 @@ let () =
     let (head, body) = full_module in
     let doc =
       SmartPrint.(separate (newline)
-                    (List.map body ~f:Atd2cconv.transform_moditem)) in
+                    (List.map body ~f:Atd2cconv.transform_module_item)) in
     let o = open_out output in
     SmartPrint.to_out_channel 78 2 o doc;
     close_out o;

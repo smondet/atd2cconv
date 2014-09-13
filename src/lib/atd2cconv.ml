@@ -162,7 +162,7 @@ let get_from_annotation ann =
           | other, _ -> None)
       | other -> say "NOC" ; None)
 
-let transform_moditem =
+let transform_module_item =
   let open Out in
   function
   | `Type (loc, (name, param, ann), expr) ->
