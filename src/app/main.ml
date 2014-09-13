@@ -98,8 +98,8 @@ let transform_expr ~self_name ?from expr =
       commentf "t_name: %s" t_name % space
       % (if t = empty then empty else (parens t % space))
       % with_mod_name "t" in
-    let source = with_mod_name "source" in
-    let sink = with_mod_name "sink" in
+    let source = assert_false in
+    let sink = assert_false in
     atom ~t ~source ~sink ()
   | `Tuple (loc, [], annot) -> assert false
   | `Tuple (loc, cell :: cell_list, annot) ->
@@ -128,10 +128,24 @@ let transform_expr ~self_name ?from expr =
       ~t:(t % fmt " option")
       ~source:(source )
       ~sink:(sink )
+  | `Record (_, field_list, _) ->
+    List.fold ~init:empty_atom field_list ~f:(fun prev f ->
+        prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
+        match f with
+        | `Field (_, (name, kind, _), expr) ->
+          go_deep expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
+          atom ()
+            ~t:(t1 % fmt "%s: " name % indent (t2) % fmt ";" % newline)
+            ~source:(o1 % o2 % fmt ";" % newline)
+            ~sink:(i1 % i2 % fmt ";" % newline)
+        | `Inherit (_, expr) ->
+          failwith "Not implemented: Inherit record fields")
+    >>= fun ~t ~source ~sink  ->
+    atom ()
+      ~t:(braces (newline % t |> indent))
+      ~source:(source % fmt "()") ~sink:(sink % fmt "()")
   | `Nullable (_, expr, _) ->
     not_implemented "Nullable"
-  | `Record (_, field_list, _) ->
-    not_implemented "Record"
   | `Shared (_, expr, _) ->
     not_implemented "Shared"
   | `Wrap (_, expr, _) ->
@@ -193,8 +207,8 @@ let go_atd atd =
   Out.to_out_channel 78 2 o doc;
   close_out o;
   let cmd fmt = ksprintf (fun s -> ignore (Sys.command s)) fmt in
-  cmd "ocamlfind ocamlc -package cconv -c %s" filename;
   cmd "sed = %s | sed 'N;s/\\n/\\  /'" filename;
+  cmd "ocamlfind ocamlc -package cconv -c %s" filename;
   ()
   (* List.map original_types (fun ( *)
 
