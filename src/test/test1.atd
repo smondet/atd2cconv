@@ -1,0 +1,22 @@
+
+type ext_type <ocaml from="AnotherModule"> = abstract
+type simple_record = {
+  one: string;
+  two: string list;
+  three: [Int of int | Float of float];
+}
+type simple_variant = [
+  | One
+  | Two of (simple_record * int)
+  | Rec of simple_variant
+  | Double of (int * string) list
+]
+type inheriting = [
+  | One_more of int option
+  | inherit simple_variant
+]
+type ('a, 'b) result = [
+  | Ok of 'a
+  | Error of 'b
+]
+
