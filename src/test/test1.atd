@@ -20,4 +20,4 @@ type ('a, 'b) result = [
   | Ok of 'a
   | Error of 'b
 ]
-type tuple = (int * (simple_variant, simple_record) result * ext_type)
+type tuple = (int * (inheriting list, simple_record) result * ext_type)
