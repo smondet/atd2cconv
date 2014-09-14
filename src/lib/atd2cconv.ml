@@ -12,6 +12,7 @@ module Out = struct
   let cmtf fmt =
     ksprintf (fun c -> string "(* " % string c % string " *)" % newline) fmt
   let comma = string "," % space
+  let apply_1 funname sub = fmt funname % space % parens (sub)
 end
 
 let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
@@ -20,7 +21,7 @@ let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
 let atom ?(t=Out.empty) ?(source=Out.empty) ?(sink=Out.empty) () =
   (`T t, `Source source, `Sink sink)
 
-let (>>=) (`T t, `Source source, `Sink sink) f = 
+let (>>=) (`T t, `Source source, `Sink sink) f =
   f ~t ~source ~sink
 
 let (+++) a b =
@@ -30,103 +31,151 @@ let (+++) a b =
   atom ~t:(t % t2) ~source:(source % o2) ~sink:(sink % i2) ()
 
 let empty_atom = atom ()
+
+let not_implemented_placeholer = Out.fmt "Obj.magic 0"
 let not_implemented msg =
   let open Out in
   atom ~t:(string "unit" % space % comment (fmt "not implemented: %s" msg)) ()
-    ~source:(fmt "assert false")
-    ~sink:(fmt "assert false")
+    ~source:not_implemented_placeholer
+    ~sink:not_implemented_placeholer
 
 let transform_expr ~self_name ?from expr =
   let open Out in
-  let assert_false = fmt "assert false" in
   let rec go_deep = function
-  | `Sum (loc, variants, ann) -> 
+  | `Sum (loc, variants, ann) ->
     let backtick n = fmt "`%s" n in
     let variant_case name expr =
       match expr with
       | Some e ->
         e >>= fun ~t ~source ~sink ->
-        let t = fmt  "  | " % name % fmt " of " % t % newline in
+        let t = fmt  "| " % backtick name % fmt " of " % t % newline in
+        let source =
+          fmt "| " % backtick name % space % fmt "elt -> " % parens (
+            OCaml.string name % comma 
+            % fmt "hcons" % space % parens source % space % fmt "elt @@ hnil"
+          ) % newline
+        in
         atom ~t ~source ~sink ()
       | None ->
-        let t = fmt  "  | " % name % newline in
-        atom ~t () in
+        let t = fmt  "| " % backtick name % newline in
+        let source = fmt "| " % backtick name % fmt " -> "
+                     % parens (OCaml.string name % comma % fmt "hnil") in
+        atom ~t ~source () in
+    let unused_name () =
+      let names = List.filter_map variants ~f:(function
+        | `Variant (_, (n, _), _) -> Some n
+        | `Inherit _ -> None) in
+      let rec n t =
+        if List.mem t ~set:names then n (sprintf "%s%s" t t) else t in
+      n "I"
+    in
     List.fold ~init:empty_atom variants ~f:(fun prev v ->
         prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
         match v with
         | `Variant (loc, (name, ann), expr_opt) ->
-          variant_case (backtick name) Option.(map expr_opt ~f:go_deep)
+          variant_case name Option.(map expr_opt ~f:go_deep)
           >>= fun ~t ~source ~sink  ->
           atom ~t:(t1 % t) ~source:(o1 % source) ()
         | `Inherit (loc, expr) ->
             go_deep expr >>= fun ~t ~source ~sink ->
-            let t = t1 % string " | " % t % newline in 
-            atom ~t ~source:o1 ~sink:i1 ())
+            let newt = t1 % string "| " % t % newline in
+            let name = OCaml.string (unused_name ()) in
+            let source =
+              o1 % fmt "| #" % t % fmt " as inher -> " % name % fmt ", hcons " 
+              % source % fmt " inher @@ hnil" in
+            atom ~t:newt ~source ~sink:i1 ())
     >>= fun ~t ~source ~sink ->
     let t = brakets (newline % indent t) in
-    atom ~t ~source:assert_false ~sink:assert_false ()
+    let source = 
+      fmt "sum_fix" % parens (newline
+        % fmt "fun t -> function" % newline %
+        source) in
+    atom ~t ~source ~sink:not_implemented_placeholer ()
   | `Tvar (loc, var_name) ->
-    let t = 
+    let t =
       (* comment (fmt "Tvar %S" var_name) % newline *)
       fmt "'%s" var_name in
-    let source = fmt "%s_source" var_name in
-    let sink =  fmt "%s_sink" var_name in
+    let source = fmt "%s" var_name in
+    let sink =  fmt "%s" var_name in
     atom ~t ~source ~sink ()
   | `Name (_, (loc, t_name, t_args), _) ->
-    let with_mod_name v = 
+    let with_mod_name kind v =
+      let ret3strings t source sink =
+        match kind with
+        | `T -> string t
+        | `Source -> string source
+        | `Sink -> string sink in
+      let same t = t in
       match t_name, from with
-      | "int", _ -> string "int"
-      | "float", _ -> string "float"
-      | "string", _ -> string "string"
-      | "list", _ -> string "list"
+      | "int", _ -> ret3strings "int" "int_" "int_"
+      | "float", _ -> ret3strings "float" "float_" "float_"
+      | "string", _ -> ret3strings "string" "string_" "string_"
+      | "list", _ -> ret3strings "list" "list_" "list_"
       | "abstract", Some f ->
-        string (String.capitalize f) % string "." % string v
-      | other, _ when other = self_name -> 
-        string "t"
-      | other, _ -> 
-        string (String.capitalize other) % string "." % string v
+        same (string (String.capitalize f) % string "." % string v)
+      | other, _ when other = self_name ->
+        same (string "t")
+      | other, _ ->
+        same (string (String.capitalize other) % string "." % string v)
     in
-    List.fold t_args ~init:empty_atom ~f:(fun prev arg_expr ->
-        prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
-        go_deep arg_expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
-        atom ()
-          ~t:(t1 % comma % t2)
-          ~source:(o1 % comma % o2)
-          ~sink:(i1 % comma % i2))
+    begin match t_args with
+    | [] -> empty_atom
+    | one :: more ->
+      let init = go_deep one in
+      List.fold more ~init ~f:(fun prev arg_expr ->
+          prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
+          go_deep arg_expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
+          atom ()
+            ~t:(t1 % comma % t2)
+            ~source:(o1 % space % o2)
+            ~sink:(i1 % space % i2))
+    end
     >>= fun ~t ~source ~sink  ->
-    let t = 
-      commentf "t_name: %s" t_name % space
-      % (if t = empty then empty else (parens t % space))
-      % with_mod_name "t" in
-    let source = assert_false in
-    let sink = assert_false in
+    let t =
+      (* commentf "t_name: %s" t_name % space % *)
+      (if t = empty then empty else (parens t % space))
+      % with_mod_name `T "t" in
+    let source = with_mod_name `Source "source" % space % source in
+    let sink = not_implemented_placeholer in
     atom ~t ~source ~sink ()
   | `Tuple (loc, [], annot) -> assert false
   | `Tuple (loc, cell :: cell_list, annot) ->
     let (_, expr, _) = cell in
-    let init = go_deep expr in
-    List.fold ~init cell_list ~f:(fun prev (_, expr, _) ->
+    let hconsify inside index =
+      fmt "hcons" % space % parens inside % space % fmt "e%d" index % newline in
+    let init = 
+      go_deep expr >>= fun ~t ~source ~sink  ->
+      atom ~t ~source:(hconsify source 0) ~sink ()
+    in
+    List.foldi ~init cell_list ~f:(fun index prev (_, expr, _) ->
         prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
         go_deep expr >>= fun ~t:t2 ~source:o2 ~sink:i2 ->
         atom ()
-          ~t:(t1 % fmt " * " % t2)
-          ~source:(o1 % comma % o2)
-          ~sink:(i1 % comma % i2))
+          ~t:(t1 % fmt " *" % space % t2)
+          ~source:(o1 % fmt " @@ " % hconsify o2 (index + 1))
+          ~sink:(i1 % fmt "; " % i2))
     >>= fun ~t ~source ~sink  ->
-    atom () ~t:(parens t) ~source ~sink
+    let source = 
+      fmt "tuple " % parens (
+        fmt "fun " % parens (
+          List.mapi (cell :: cell_list) ~f:(fun i _ -> fmt "e%d" i) 
+          |> separate (fmt ", ")) % fmt " -> " % newline
+        % indent (parens (source % fmt " hnil")))
+    in
+    atom () ~t:(parens t) ~source  ~sink
   | `List (_, expr, _) ->
     go_deep expr
     >>= fun ~t ~source ~sink  ->
     atom ()
       ~t:(t % fmt " array")
-      ~source:(source )
+      ~source:(apply_1 "array_" source)
       ~sink:(sink )
   | `Option (_, expr, _) ->
     go_deep expr
     >>= fun ~t ~source ~sink  ->
     atom ()
       ~t:(t % fmt " option")
-      ~source:(source )
+      ~source:(apply_1 "opt" source)
       ~sink:(sink )
   | `Record (_, field_list, _) ->
     List.fold ~init:empty_atom field_list ~f:(fun prev f ->
@@ -134,16 +183,26 @@ let transform_expr ~self_name ?from expr =
         match f with
         | `Field (_, (name, kind, _), expr) ->
           go_deep expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
-          atom ()
-            ~t:(t1 % fmt "%s: " name % indent (t2) % fmt ";" % newline)
-            ~source:(o1 % o2 % fmt ";" % newline)
+          let t = t1 % fmt "%s: " name % indent (t2) % fmt ";" % newline in
+          let source =
+            o1 % fmt "field " % OCaml.string name % space
+            % parens (fmt "fun p -> p." % string name) % space 
+            % parens o2 % fmt " @@ "
+            % newline
+          in
+          atom () ~t
+            ~source
             ~sink:(i1 % i2 % fmt ";" % newline)
         | `Inherit (_, expr) ->
           failwith "Not implemented: Inherit record fields")
-    >>= fun ~t ~source ~sink  ->
+    >>= fun ~t ~source:source_inside ~sink  ->
+    let source =
+      fmt "record_fix" % space % indent 
+        (parens (fmt "fun t ->" % newline % source_inside % fmt "record_stop"))
+    in
     atom ()
       ~t:(braces (newline % t |> indent))
-      ~source:(source % fmt "()") ~sink:(sink % fmt "()")
+      ~source ~sink:(sink % not_implemented_placeholer)
   | `Nullable (_, expr, _) ->
     not_implemented "Nullable"
   | `Shared (_, expr, _) ->
@@ -169,21 +228,41 @@ let transform_module_item =
     let from = get_from_annotation ann in
     let self_name = name in
     transform_expr ?from ~self_name expr >>= fun ~t ~source ~sink ->
+    let type_parameters =
+      match param with
+      | [] -> ""
+      | more ->
+        sprintf "(%s)" (List.map param ~f:(sprintf "'%s")
+                        |> String.concat ", ")
+    in
+    let function_type modname =
+      match param with
+      | [] -> fmt "t CConv.%s.t" modname
+      | more ->
+        separate (fmt " -> ")
+          (List.map param ~f:(fun n -> fmt "'%s CConv.%s.t" n modname))
+        % fmt " -> %s t CConv.%s.t" type_parameters modname
+    in
+    let fun_definition =
+      match param with
+      | [] -> fmt ""
+      | more ->
+        fmt "fun " % separate space (List.map more (fmt "%s")) % fmt " -> "
+    in
+    let t_sink_source what inside =
+      let modname = String.capitalize what in
+      fmt "let %s : " what % function_type modname % fmt " =" % newline
+      % indent (fun_definition % fmt "CConv.%s." modname % parens inside)
+      % newline in
     let t =
-      comment (fmt "Type %s" 
+      comment (fmt "Type %s"
                  (Atd_print.string_of_type_name name [expr] ann)) % newline
       % fmt "module %s = struct" (String.capitalize name) % newline
       % indent (
-        fmt "type %s t = "
-          (match param with
-           | [] -> ""
-           | more ->
-             sprintf "(%s)" (List.map param ~f:(sprintf "'%s") 
-                             |> String.concat ", "))
-        % t
+        fmt "type %s t = " type_parameters % t
         % newline
-        % fmt "let source = " % source % newline
-        % fmt "let sink = " % sink % newline
+        % t_sink_source "source" source
+        % t_sink_source "sink" sink
       )
       % fmt "end" % newline
     in
