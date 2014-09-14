@@ -19,25 +19,31 @@ let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
 
 
 let atom ?(t=Out.empty) ?(source=Out.empty) ?(sink=Out.empty) () =
-  (`T t, `Source source, `Sink sink)
+  `Ok (`T t, `Source source, `Sink sink)
 
-let (>>=) (`T t, `Source source, `Sink sink) f =
-  f ~t ~source ~sink
+let (>>=) t f =
+  match t with
+  | `Ok (`T t, `Source source, `Sink sink) -> f ~t ~source ~sink
+  | `Error e -> `Error e
 
+(*
 let (+++) a b =
   a >>= fun ~t ~source ~sink  ->
   b >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
   let open Out in
   atom ~t:(t % t2) ~source:(source % o2) ~sink:(sink % i2) ()
+*)
 
 let empty_atom = atom ()
 
 let not_implemented_placeholer = Out.fmt "Obj.magic 0"
 let not_implemented msg =
+  `Error (`Not_implemented msg)
+    (*
   let open Out in
   atom ~t:(string "unit" % space % comment (fmt "not implemented: %s" msg)) ()
     ~source:not_implemented_placeholer
-    ~sink:not_implemented_placeholer
+    ~sink:not_implemented_placeholer *)
 
 let transform_expr ~self_name ?from expr =
   let open Out in
@@ -227,46 +233,49 @@ let transform_module_item =
   | `Type (loc, (name, param, ann), expr) ->
     let from = get_from_annotation ann in
     let self_name = name in
-    transform_expr ?from ~self_name expr >>= fun ~t ~source ~sink ->
-    let type_parameters =
-      match param with
-      | [] -> ""
-      | more ->
-        sprintf "(%s)" (List.map param ~f:(sprintf "'%s")
-                        |> String.concat ", ")
-    in
-    let function_type modname =
-      match param with
-      | [] -> fmt "t CConv.%s.t" modname
-      | more ->
-        separate (fmt " -> ")
-          (List.map param ~f:(fun n -> fmt "'%s CConv.%s.t" n modname))
-        % fmt " -> %s t CConv.%s.t" type_parameters modname
-    in
-    let fun_definition =
-      match param with
-      | [] -> fmt ""
-      | more ->
-        fmt "fun " % separate space (List.map more (fmt "%s")) % fmt " -> "
-    in
-    let t_sink_source what inside =
-      let modname = String.capitalize what in
-      fmt "let %s : " what % function_type modname % fmt " =" % newline
-      % indent (fun_definition % fmt "CConv.%s." modname % parens inside)
-      % newline in
-    let t =
-      comment (fmt "Type %s"
-                 (Atd_print.string_of_type_name name [expr] ann)) % newline
-      % fmt "module %s = struct" (String.capitalize name) % newline
-      % indent (
-        fmt "type %s t = " type_parameters % t
-        % newline
-        % t_sink_source "source" source
-        % t_sink_source "sink" sink
-      )
-      % fmt "end" % newline
-    in
-    t
+    begin match transform_expr ?from ~self_name expr with
+    | `Ok (`T t, `Source source, `Sink sink) ->
+      let type_parameters =
+        match param with
+        | [] -> ""
+        | more ->
+          sprintf "(%s)" (List.map param ~f:(sprintf "'%s")
+                          |> String.concat ", ")
+      in
+      let function_type modname =
+        match param with
+        | [] -> fmt "t CConv.%s.t" modname
+        | more ->
+          separate (fmt " -> ")
+            (List.map param ~f:(fun n -> fmt "'%s CConv.%s.t" n modname))
+          % fmt " -> %s t CConv.%s.t" type_parameters modname
+      in
+      let fun_definition =
+        match param with
+        | [] -> fmt ""
+        | more ->
+          fmt "fun " % separate space (List.map more (fmt "%s")) % fmt " -> "
+      in
+      let t_sink_source what inside =
+        let modname = String.capitalize what in
+        fmt "let %s : " what % function_type modname % fmt " =" % newline
+        % indent (fun_definition % fmt "CConv.%s." modname % parens inside)
+        % newline in
+      let t =
+        comment (fmt "Type %s"
+                   (Atd_print.string_of_type_name name [expr] ann)) % newline
+        % fmt "module %s = struct" (String.capitalize name) % newline
+        % indent (
+          fmt "type %s t = " type_parameters % t
+          % newline
+          % t_sink_source "source" source
+          % t_sink_source "sink" sink
+        )
+        % fmt "end" % newline
+      in
+      `Ok t
+    | `Error e -> `Error e
+    end
 
 
 
