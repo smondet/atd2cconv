@@ -12,7 +12,7 @@ module Out = struct
   let cmtf fmt =
     ksprintf (fun c -> string "(* " % string c % string " *)" % newline) fmt
   let comma = string "," % space
-  let apply_1 funname sub = fmt funname % space % parens (sub)
+  let apply_1 funname sub = parens (fmt funname % space % parens (sub))
 end
 
 let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
