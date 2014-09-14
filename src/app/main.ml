@@ -6,7 +6,7 @@ let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
 let () =
   match Array.to_list Sys.argv with
   | _ :: [input; output] ->
-    let atd = Atd_util.load_file input in
+    let atd = Atd_util.load_file ~inherit_variants:false input in
     let (full_module, original_types) = atd in
     let (head, body) = full_module in
     let doc =

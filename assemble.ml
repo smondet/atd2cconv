@@ -20,10 +20,11 @@ let main_test =
   let temp2 = Filename.temp_file "atd2cconvtest" ".ml" in
   test "T" ~deps:[app] [
     test_bin app ~args:(fun resolver -> ["src/test/test1.atd"; temp]) ();
-    test_shell "cat src/test/test1_header.ml %s > %s" temp temp2;
+    test_shell "cat src/test/test1_header.ml %s > %s src/test/test1_footer.ml"
+      temp temp2;
     test_shell "sed = %s | sed 'N;s/\\n/\\  /'" temp2;
-    test_shell "ocamlfind ocamlc -package cconv -c %s" temp2;
-    test_shell "echo OK";
+    test_shell "ocamlfind ocamlc -package cconv.yojson -linkpkg  %s -o _build/bouh" temp2;
+    test_shell "_build/bouh ; echo OK";
   ] 
 
 let () =

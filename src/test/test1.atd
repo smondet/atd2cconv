@@ -2,7 +2,7 @@
 type ext_type <ocaml from="AnotherModule"> = abstract
 type simple_record = {
   one: string;
-  two: string list;
+  two: string list option;
   three: [Int of int | Float of float];
 }
 type simple_variant = [
@@ -13,10 +13,11 @@ type simple_variant = [
 ]
 type inheriting = [
   | One_more of int option
+  | I of int
   | inherit simple_variant
 ]
 type ('a, 'b) result = [
   | Ok of 'a
   | Error of 'b
 ]
-
+type tuple = (int * (simple_variant, simple_record) result * ext_type)
