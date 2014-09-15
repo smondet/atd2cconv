@@ -13,8 +13,8 @@ let () =
       AnotherModule.(Lambda ("x", App (Lambda ("y", App (Var "y", Var "x")), Var "x")))
     ) 
   in
-  let json = CConv.into Tuple.source CConvYojson.sink  value in
+  let json = CConv.into (Tuple.source ()) CConvYojson.sink  value in
   let s = Yojson.Basic.to_string ~std:true json in
   say "%s" s;
-  assert (CConv.from CConvYojson.source Tuple.sink json = value)
+  assert (CConv.from CConvYojson.source (Tuple.sink ()) json = value)
   

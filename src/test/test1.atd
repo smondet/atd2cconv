@@ -13,7 +13,7 @@ type simple_variant = [
 ]
 type inheriting = [
   | One_more of int option
-  | I of int
+  | I of tuple
   | inherit simple_variant
 ]
 type ('a, 'b) result = [
