@@ -6,13 +6,16 @@ module Out = struct
   let fmt fmt =
     Printf.ksprintf (string) fmt
   let (%) = (^-^)
-  let comment c = string "(* " % c % string " *)"
+  let (%%) a b = a % space % b
+  let comment c = string "(*" %% c %% string "*)"
   let commentf fmt =
     ksprintf (fun c -> string "(* " % string c % string " *)") fmt
   let cmtf fmt =
     ksprintf (fun c -> string "(* " % string c % string " *)" % newline) fmt
   let comma = string "," % space
-  let apply_1 funname sub = parens (fmt funname % space % parens (sub))
+  let apply_1 funname sub = parens (fmt funname %% parens (sub))
+  let arrow = fmt "->"
+  let pipe = fmt "|"
 end
 
 let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
@@ -26,24 +29,12 @@ let (>>=) t f =
   | `Ok (`T t, `Source source, `Sink sink) -> f ~t ~source ~sink
   | `Error e -> `Error e
 
-(*
-let (+++) a b =
-  a >>= fun ~t ~source ~sink  ->
-  b >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
-  let open Out in
-  atom ~t:(t % t2) ~source:(source % o2) ~sink:(sink % i2) ()
-*)
 
 let empty_atom = atom ()
 
 let not_implemented_placeholer = Out.fmt "Obj.magic 0"
 let not_implemented msg =
   `Error (`Not_implemented msg)
-    (*
-  let open Out in
-  atom ~t:(string "unit" % space % comment (fmt "not implemented: %s" msg)) ()
-    ~source:not_implemented_placeholer
-    ~sink:not_implemented_placeholer *)
 
 let transform_expr ~self_name ?from expr =
   let open Out in
@@ -56,17 +47,23 @@ let transform_expr ~self_name ?from expr =
         e >>= fun ~t ~source ~sink ->
         let t = fmt  "| " % backtick name % fmt " of " % t % newline in
         let source =
-          fmt "| " % backtick name % space % fmt "elt -> " % parens (
+          fmt "| " % backtick name %% fmt "elt" %% arrow %% parens (
             OCaml.string name % comma 
-            % fmt "hcons" % space % parens source % space % fmt "elt @@ hnil"
+            % fmt "hcons" %% parens source %% fmt "elt @@ hnil"
           ) % newline
         in
+        let sink =
+          pipe %% OCaml.string name %% arrow %% 
+          sink %% fmt "|+|" %% fmt "fun" %% fmt "elt" %% arrow 
+          %% fmt "yield" %% parens (backtick name %% fmt "elt") % newline in
         atom ~t ~source ~sink ()
       | None ->
         let t = fmt  "| " % backtick name % newline in
-        let source = fmt "| " % backtick name % fmt " -> "
-                     % parens (OCaml.string name % comma % fmt "hnil") in
-        atom ~t ~source () in
+        let source = fmt "| " % backtick name %% arrow
+                     %% parens (OCaml.string name % comma % fmt "hnil") in
+        let sink =
+          pipe %% OCaml.string name %% arrow %% fmt "yield" %% backtick name in
+        atom ~t ~source ~sink () in
     let unused_name () =
       let names = List.filter_map variants ~f:(function
         | `Variant (_, (n, _), _) -> Some n
@@ -81,22 +78,31 @@ let transform_expr ~self_name ?from expr =
         | `Variant (loc, (name, ann), expr_opt) ->
           variant_case name Option.(map expr_opt ~f:go_deep)
           >>= fun ~t ~source ~sink  ->
-          atom ~t:(t1 % t) ~source:(o1 % source) ()
+          atom ~t:(t1 % t) ~source:(o1 % source) ~sink:(i1 % sink) ()
         | `Inherit (loc, expr) ->
             go_deep expr >>= fun ~t ~source ~sink ->
             let newt = t1 % string "| " % t % newline in
             let name = OCaml.string (unused_name ()) in
             let source =
-              o1 % fmt "| #" % t % fmt " as inher -> " % name % fmt ", hcons " 
-              % source % fmt " inher @@ hnil" in
-            atom ~t:newt ~source ~sink:i1 ())
+              o1 % fmt "| #" % t % fmt " as inher" %% arrow 
+              %% name % comma % fmt "hcons" 
+              %% source %% fmt "inher @@ hnil" in
+            let sink =
+              i1 % pipe %% name %% arrow %% sink %% fmt "|+|" %% fmt "fun" 
+              %% fmt "inher" %% arrow %% fmt "yield" %% fmt "(inher :> t_alias)" % newline in
+            atom ~t:newt ~source ~sink ())
     >>= fun ~t ~source ~sink ->
     let t = brakets (newline % indent t) in
-    let source = 
-      fmt "sum_fix" % parens (newline
-        % fmt "fun t -> function" % newline %
-        source) in
-    atom ~t ~source ~sink:not_implemented_placeholer ()
+    let sum_fix inside =
+      fmt "sum_fix" % parens (indent (
+        newline % fmt "fun t" %% arrow %% fmt "function" % newline
+        % inside)) in
+    let source =  sum_fix source in
+    let sink = 
+      sum_fix (sink
+               % fmt "| other -> CConv.report_error \
+                      \"unexpected variant name: %%S\" other") in
+    atom ~t ~source ~sink ()
   | `Tvar (loc, var_name) ->
     let t =
       (* comment (fmt "Tvar %S" var_name) % newline *)
@@ -133,41 +139,51 @@ let transform_expr ~self_name ?from expr =
           go_deep arg_expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
           atom ()
             ~t:(t1 % comma % t2)
-            ~source:(o1 % space % o2)
-            ~sink:(i1 % space % i2))
+            ~source:(o1 %% o2)
+            ~sink:(i1 %% i2))
     end
     >>= fun ~t ~source ~sink  ->
     let t =
-      (* commentf "t_name: %s" t_name % space % *)
+      (* commentf "t_name: %s" t_name %% *)
       (if t = empty then empty else (parens t % space))
       % with_mod_name `T "t" in
-    let source = with_mod_name `Source "source" % space % source in
-    let sink = not_implemented_placeholer in
+    let source = with_mod_name `Source "source" %% source in
+    let sink = with_mod_name `Sink "sink" %% sink in
     atom ~t ~source ~sink ()
-  | `Tuple (loc, [], annot) -> assert false
+  | `Tuple (loc, [], annot) -> not_implemented "Empty Tuple"
   | `Tuple (loc, cell :: cell_list, annot) ->
     let (_, expr, _) = cell in
     let hconsify inside index =
-      fmt "hcons" % space % parens inside % space % fmt "e%d" index % newline in
+      fmt "hcons" %% parens inside %% fmt "e%d" index % newline in
+    let sink_plus sink index =
+      parens sink  %% fmt "|+|" %% fmt "fun" % space 
+      % fmt "e%d" index %% fmt "->" % newline in
     let init = 
       go_deep expr >>= fun ~t ~source ~sink  ->
+      let sink = sink_plus sink 0 in
       atom ~t ~source:(hconsify source 0) ~sink ()
     in
     List.foldi ~init cell_list ~f:(fun index prev (_, expr, _) ->
         prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
         go_deep expr >>= fun ~t:t2 ~source:o2 ~sink:i2 ->
         atom ()
-          ~t:(t1 % fmt " *" % space % t2)
+          ~t:(t1 % fmt " *" %% t2)
           ~source:(o1 % fmt " @@ " % hconsify o2 (index + 1))
-          ~sink:(i1 % fmt "; " % i2))
+          ~sink:(i1 % sink_plus i2 (index + 1)))
     >>= fun ~t ~source ~sink  ->
+    let tuple_expanded =
+      parens (
+        List.mapi (cell :: cell_list) ~f:(fun i _ -> fmt "e%d" i) 
+        |> separate (fmt ", ")) in
     let source = 
       fmt "tuple " % parens (
-        fmt "fun " % parens (
-          List.mapi (cell :: cell_list) ~f:(fun i _ -> fmt "e%d" i) 
-          |> separate (fmt ", ")) % fmt " -> " % newline
+        fmt "fun " % tuple_expanded % fmt " -> " % newline
         % indent (parens (source % fmt " hnil")))
     in
+    let sink =
+      fmt "tuple" %% parens (
+        indent (
+          newline % sink %% fmt "yield" %% tuple_expanded)) in
     atom () ~t:(parens t) ~source  ~sink
   | `List (_, expr, _) ->
     go_deep expr
@@ -175,14 +191,14 @@ let transform_expr ~self_name ?from expr =
     atom ()
       ~t:(t % fmt " array")
       ~source:(apply_1 "array_" source)
-      ~sink:(sink )
+      ~sink:(apply_1 "array_" sink)
   | `Option (_, expr, _) ->
     go_deep expr
     >>= fun ~t ~source ~sink  ->
     atom ()
       ~t:(t % fmt " option")
       ~source:(apply_1 "opt" source)
-      ~sink:(sink )
+      ~sink:(apply_1 "opt" sink)
   | `Record (_, field_list, _) ->
     List.fold ~init:empty_atom field_list ~f:(fun prev f ->
         prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
@@ -196,19 +212,31 @@ let transform_expr ~self_name ?from expr =
             % parens o2 % fmt " @@ "
             % newline
           in
+          let sink =
+            i1 % fmt "field" %% OCaml.string name % space
+            % parens i2 %% fmt "@@" % space
+            % fmt "fun" %% string name %% fmt "->" % newline in
           atom () ~t
             ~source
-            ~sink:(i1 % i2 % fmt ";" % newline)
-        | `Inherit (_, expr) ->
-          failwith "Not implemented: Inherit record fields")
+            ~sink
+        | `Inherit (_, expr) -> not_implemented "Inherit record fields")
     >>= fun ~t ~source:source_inside ~sink  ->
     let source =
-      fmt "record_fix" % space % indent 
+      fmt "record_fix" %% indent 
         (parens (fmt "fun t ->" % newline % source_inside % fmt "record_stop"))
+    in
+    let sink =
+      let names = List.map field_list ~f:(function
+        | `Field (_, (name, kind, _), expr) -> name
+        | `Inherit _ -> (* should have failed earlier *) assert false) in
+      fmt "record_fix" %% indent 
+        (parens (fmt "fun t ->" % newline % sink 
+                 % fmt "yield_record"
+                 %% braces (separate (fmt "; ") (List.map names ~f:string))))
     in
     atom ()
       ~t:(braces (newline % t |> indent))
-      ~source ~sink:(sink % not_implemented_placeholer)
+      ~source ~sink
   | `Nullable (_, expr, _) ->
     not_implemented "Nullable"
   | `Shared (_, expr, _) ->
@@ -258,7 +286,7 @@ let transform_module_item =
       in
       let t_sink_source what inside =
         let modname = String.capitalize what in
-        fmt "let %s : " what % function_type modname % fmt " =" % newline
+        fmt "let %s :" what %% function_type modname % fmt " =" % newline
         % indent (fun_definition % fmt "CConv.%s." modname % parens inside)
         % newline in
       let t =
@@ -266,8 +294,8 @@ let transform_module_item =
                    (Atd_print.string_of_type_name name [expr] ann)) % newline
         % fmt "module %s = struct" (String.capitalize name) % newline
         % indent (
-          fmt "type %s t = " type_parameters % t
-          % newline
+          fmt "type %s t = " type_parameters % t % newline
+          % fmt "type %s t_alias = %s t" type_parameters type_parameters % newline
           % t_sink_source "source" source
           % t_sink_source "sink" sink
         )
