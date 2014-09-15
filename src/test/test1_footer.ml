@@ -5,11 +5,11 @@ let () =
   let value =
     (
       42, 
-      `Ok ([|
-          `Two ({Simple_record. one = "oooooo"; two = Some [| "aaa"; "bbb" |];
+      `Ok ([
+          `Two ({Simple_record. one = "oooooo"; two = Some [ "aaa"; "bbb" ];
                  three = `Float 3.14}, 43);
           `One_more (Some 42);
-        |]),
+        ]),
       AnotherModule.(Lambda ("x", App (Lambda ("y", App (Var "y", Var "x")), Var "x")))
     ) 
   in
