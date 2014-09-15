@@ -198,9 +198,9 @@ let transform_expr ~self_name ?from expr =
     go_deep expr
     >>= fun ~t ~source ~sink  ->
     atom ()
-      ~t:(t % fmt " array")
-      ~source:(apply_1 "array_" source)
-      ~sink:(apply_1 "array_" sink)
+      ~t:(t % fmt " list")
+      ~source:(apply_1 "list_" source)
+      ~sink:(apply_1 "list_" sink)
   | `Option (_, expr, _) ->
     go_deep expr
     >>= fun ~t ~source ~sink  ->
