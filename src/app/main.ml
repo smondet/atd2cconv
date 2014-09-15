@@ -33,14 +33,26 @@ let () =
       ~inherit_variants:!inherit_variants i in
   let (full_module, original_types) = atd in
   let (head, body) = full_module in
-  List.iter body ~f:(fun item ->
-      match Atd2cconv.transform_module_item item with
-      | `Ok doc ->
-        SmartPrint.to_out_channel 78 2 o doc;
-        output_string o "\n\n"
-      | `Error (`Not_implemented msg) ->
-        say "Error: %S not implemented" msg
-    );
+  let sorted = Atd_util.tsort body in
+  let doc =
+    let open SmartPrint in
+    try
+      List.fold sorted ~init:(empty) ~f:(fun prev (recur, mod_body) ->
+          prev ^^ string "module rec "
+          ^^ separate (newline ^^ string "and" ^^ newline)
+            (List.map mod_body ~f:(fun item ->
+                 match Atd2cconv.transform_module_item item with
+                 | `Ok doc -> doc
+                 | `Error (`Not_implemented msg) ->
+                   failwithf "Error: %S not implemented" msg)))
+      ^^ newline
+    with e ->
+      closi i;
+      closo o;
+      raise e
+  in
+  SmartPrint.to_out_channel 78 2 o doc;
+  output_string o "\n\n";
   closi i;
   closo o;
   ()

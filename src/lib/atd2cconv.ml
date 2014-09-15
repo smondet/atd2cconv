@@ -14,8 +14,11 @@ module Out = struct
     ksprintf (fun c -> string "(* " % string c % string " *)" % newline) fmt
   let comma = string "," % space
   let apply_1 funname sub = parens (fmt funname %% parens (sub))
-  let arrow = fmt "->"
-  let pipe = fmt "|"
+  let arrow  = string "->"
+  let pipe   = string "|"
+  let colon  = string ":"
+  let equals = string "="
+  let unit_value = string "()"
 end
 
 let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
@@ -45,9 +48,9 @@ let transform_expr ~self_name ?from expr =
       match expr with
       | Some e ->
         e >>= fun ~t ~source ~sink ->
-        let t = fmt  "| " % backtick name % fmt " of " % t % newline in
+        let t = pipe %% backtick name %% fmt "of" %% t % newline in
         let source =
-          fmt "| " % backtick name %% fmt "elt" %% arrow %% parens (
+          pipe %% backtick name %% fmt "elt" %% arrow %% parens (
             OCaml.string name % comma 
             % fmt "hcons" %% parens source %% fmt "elt @@ hnil"
           ) % newline
@@ -86,9 +89,9 @@ let transform_expr ~self_name ?from expr =
             let source =
               o1 % fmt "| #" % t % fmt " as inher" %% arrow 
               %% name % comma % fmt "hcons" 
-              %% source %% fmt "inher @@ hnil" in
+              %% parens source %% fmt "inher @@ hnil" in
             let sink =
-              i1 % pipe %% name %% arrow %% sink %% fmt "|+|" %% fmt "fun" 
+              i1 % pipe %% name %% arrow %% parens sink %% fmt "|+|" %% fmt "fun" 
               %% fmt "inher" %% arrow %% fmt "yield" %% fmt "(inher :> t_alias)" % newline in
             atom ~t:newt ~source ~sink ())
     >>= fun ~t ~source ~sink ->
@@ -111,24 +114,32 @@ let transform_expr ~self_name ?from expr =
     let sink =  fmt "%s" var_name in
     atom ~t ~source ~sink ()
   | `Name (_, (loc, t_name, t_args), _) ->
-    let with_mod_name kind v =
+    let with_mod_name kind v inside =
       let ret3strings t source sink =
         match kind with
         | `T -> string t
         | `Source -> string source
         | `Sink -> string sink in
       let same t = t in
+      let call_module f =
+        match kind with
+        | `T -> string (String.capitalize f) % string "." % string v
+        | `Source | `Sink ->
+          string (String.capitalize f) % string "." % string v %% inside
+          %% unit_value
+      in
       match t_name, from with
       | "int", _ -> ret3strings "int" "int_" "int_"
       | "float", _ -> ret3strings "float" "float_" "float_"
       | "string", _ -> ret3strings "string" "string_" "string_"
       | "list", _ -> ret3strings "list" "list_" "list_"
-      | "abstract", Some f ->
-        same (string (String.capitalize f) % string "." % string v)
+      | "abstract", Some f -> call_module f
       | other, _ when other = self_name ->
-        same (string "t")
-      | other, _ ->
-        same (string (String.capitalize other) % string "." % string v)
+        (* if `t` appears as a recursive sink/source, 
+           it should not be applied to ()  *)
+        same (string "t" %% inside)
+      | other, _ -> call_module other
+        (* same (string (String.capitalize other) % string "." % string v %% inside) *)
     in
     begin match t_args with
     | [] -> empty_atom
@@ -139,16 +150,16 @@ let transform_expr ~self_name ?from expr =
           go_deep arg_expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
           atom ()
             ~t:(t1 % comma % t2)
-            ~source:(o1 %% o2)
-            ~sink:(i1 %% i2))
+            ~source:(o1 %% parens o2)
+            ~sink:(i1 %% parens i2))
     end
     >>= fun ~t ~source ~sink  ->
     let t =
       (* commentf "t_name: %s" t_name %% *)
       (if t = empty then empty else (parens t % space))
-      % with_mod_name `T "t" in
-    let source = with_mod_name `Source "source" %% source in
-    let sink = with_mod_name `Sink "sink" %% sink in
+      % with_mod_name `T "t" empty in
+    let source = with_mod_name `Source "source" source in
+    let sink = with_mod_name `Sink "sink" sink in
     atom ~t ~source ~sink ()
   | `Tuple (loc, [], annot) -> not_implemented "Empty Tuple"
   | `Tuple (loc, cell :: cell_list, annot) ->
@@ -271,35 +282,48 @@ let transform_module_item =
                           |> String.concat ", ")
       in
       let function_type modname =
-        match param with
-        | [] -> fmt "t CConv.%s.t" modname
-        | more ->
-          separate (fmt " -> ")
-            (List.map param ~f:(fun n -> fmt "'%s CConv.%s.t" n modname))
-          % fmt " -> %s t CConv.%s.t" type_parameters modname
+        (* match param with *)
+        (* | [] -> fmt "t CConv.%s.t" modname *)
+        (* | more -> *)
+        separate (fmt " -> ")
+          (List.map param ~f:(fun n -> fmt "'%s CConv.%s.t" n modname)
+           @ [string "unit"])
+        % fmt " -> %s t CConv.%s.t" type_parameters modname
       in
       let fun_definition =
-        match param with
-        | [] -> fmt ""
-        | more ->
-          fmt "fun " % separate space (List.map more (fmt "%s")) % fmt " -> "
+        (* match param with *)
+        (* | [] -> fmt "" *)
+        (* | more -> *)
+          fmt "fun " % separate space (List.map param (fmt "%s")) % fmt " () -> "
       in
       let t_sink_source what inside =
         let modname = String.capitalize what in
         fmt "let %s :" what %% function_type modname % fmt " =" % newline
         % indent (fun_definition % fmt "CConv.%s." modname % parens inside)
         % newline in
-      let t =
-        comment (fmt "Type %s"
-                   (Atd_print.string_of_type_name name [expr] ann)) % newline
-        % fmt "module %s = struct" (String.capitalize name) % newline
-        % indent (
-          fmt "type %s t = " type_parameters % t % newline
+      let signature =
+        fmt "sig" %% indent (
+          newline 
+          % fmt "type" %% string type_parameters %% fmt "t" %% equals %% t % newline
+          % fmt "val" %% fmt "source" %% colon %% function_type "Source" % newline
+          % fmt "val" %% fmt "sink" %% colon %% function_type "Sink" % newline
+          % newline
+        ) 
+        % fmt "end" in
+      let structure =
+        fmt "struct" %% indent (
+          newline 
+          % fmt "type %s t = " type_parameters % t % newline
           % fmt "type %s t_alias = %s t" type_parameters type_parameters % newline
           % t_sink_source "source" source
           % t_sink_source "sink" sink
-        )
-        % fmt "end" % newline
+          % newline
+        ) %fmt "end" in
+      let t =
+        (* comment (fmt "Type %s" *)
+        (*            (Atd_print.string_of_type_name name [expr] ann)) % newline *)
+        string (String.capitalize name)
+        %% colon %% signature %% equals %% structure
       in
       `Ok t
     | `Error e -> `Error e
