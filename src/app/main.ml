@@ -39,8 +39,7 @@ let () =
         SmartPrint.to_out_channel 78 2 o doc;
         output_string o "\n\n"
       | `Error (`Not_implemented msg) ->
-        close_out o;
-        failwithf "Error: %S not implemented" msg
+        say "Error: %S not implemented" msg
     );
   closi i;
   closo o;
