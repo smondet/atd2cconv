@@ -20,3 +20,10 @@ module AnotherModule = struct
     ))
 end
 
+module Another_mod = struct
+  module Inside_another_one = struct
+    type t = string
+    let source () = CConv.Source.string_
+    let sink () = CConv.Sink.string_
+  end
+end

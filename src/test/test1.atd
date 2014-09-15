@@ -1,7 +1,8 @@
 
 type ext_type <ocaml from="AnotherModule"> = abstract
+type ext_type_2 <ocaml from="Another_mod.Inside_another_one"> = abstract
 type simple_record = {
-  one: string;
+  one: ext_type_2;
   two: string list option;
   three: [Int of int | Float of float];
 }
