@@ -19,6 +19,7 @@ module Out = struct
   let colon  = string ":"
   let equals = string "="
   let unit_value = string "()"
+  let sharp = string "#"
 end
 
 let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
@@ -61,8 +62,8 @@ let transform_expr ~self_name ?from expr =
           %% fmt "yield" %% parens (backtick name %% fmt "elt") % newline in
         atom ~t ~source ~sink ()
       | None ->
-        let t = fmt  "| " % backtick name % newline in
-        let source = fmt "| " % backtick name %% arrow
+        let t = pipe %% backtick name % newline in
+        let source = pipe %% backtick name %% arrow
                      %% parens (OCaml.string name % comma % fmt "hnil") in
         let sink =
           pipe %% OCaml.string name %% arrow %% fmt "yield" %% backtick name in
@@ -87,7 +88,7 @@ let transform_expr ~self_name ?from expr =
             let newt = t1 % string "| " % t % newline in
             let name = OCaml.string (unused_name ()) in
             let source =
-              o1 % fmt "| #" % t % fmt " as inher" %% arrow 
+              o1 % pipe %% sharp % t % fmt " as inher" %% arrow 
               %% name % comma % fmt "hcons" 
               %% parens source %% fmt "inher @@ hnil" in
             let sink =
@@ -103,15 +104,14 @@ let transform_expr ~self_name ?from expr =
     let source =  sum_fix source in
     let sink = 
       sum_fix (sink
-               % fmt "| other -> CConv.report_error \
-                      \"unexpected variant name: %%S\" other") in
+               % pipe %% string "other" %% arrow
+               %% string "CConv.report_error"
+               %% OCaml.string "unexpected variant name: %S" %% string "other") in
     atom ~t ~source ~sink ()
   | `Tvar (loc, var_name) ->
-    let t =
-      (* comment (fmt "Tvar %S" var_name) % newline *)
-      fmt "'%s" var_name in
-    let source = fmt "%s" var_name in
-    let sink =  fmt "%s" var_name in
+    let t = fmt "'%s" var_name in
+    let source = string var_name in
+    let sink =  string var_name in
     atom ~t ~source ~sink ()
   | `Name (_, (loc, t_name, t_args), _) ->
     let with_mod_name kind v inside =
@@ -139,7 +139,6 @@ let transform_expr ~self_name ?from expr =
            it should not be applied to ()  *)
         same (string "t" %% inside)
       | other, _ -> call_module other
-        (* same (string (String.capitalize other) % string "." % string v %% inside) *)
     in
     begin match t_args with
     | [] -> empty_atom
@@ -155,7 +154,6 @@ let transform_expr ~self_name ?from expr =
     end
     >>= fun ~t ~source ~sink  ->
     let t =
-      (* commentf "t_name: %s" t_name %% *)
       (if t = empty then empty else (parens t % space))
       % with_mod_name `T "t" empty in
     let source = with_mod_name `Source "source" source in
@@ -264,7 +262,7 @@ let get_from_annotation ann =
         List.find_map fields ~f:(function
           | "from", (loc, val_opt) -> val_opt
           | other, _ -> None)
-      | other -> say "NOC" ; None)
+      | other -> None)
 
 let transform_module_item =
   let open Out in
@@ -278,27 +276,21 @@ let transform_module_item =
         match param with
         | [] -> ""
         | more ->
-          sprintf "(%s)" (List.map param ~f:(sprintf "'%s")
-                          |> String.concat ", ")
+          sprintf "(%s)"
+            (List.map param ~f:(sprintf "'%s") |> String.concat ", ")
       in
       let function_type modname =
-        (* match param with *)
-        (* | [] -> fmt "t CConv.%s.t" modname *)
-        (* | more -> *)
         separate (fmt " -> ")
           (List.map param ~f:(fun n -> fmt "'%s CConv.%s.t" n modname)
            @ [string "unit"])
-        % fmt " -> %s t CConv.%s.t" type_parameters modname
+        %% arrow %% string type_parameters %% fmt "t CConv.%s.t" modname
       in
       let fun_definition =
-        (* match param with *)
-        (* | [] -> fmt "" *)
-        (* | more -> *)
-          fmt "fun " % separate space (List.map param (fmt "%s")) % fmt " () -> "
-      in
+        fmt "fun" %% separate space (List.map param (fmt "%s"))
+        %% unit_value %% arrow in
       let t_sink_source what inside =
         let modname = String.capitalize what in
-        fmt "let %s :" what %% function_type modname % fmt " =" % newline
+        fmt "let %s :" what %% function_type modname %% equals % newline
         % indent (fun_definition % fmt "CConv.%s." modname % parens inside)
         % newline in
       let signature =
@@ -320,8 +312,6 @@ let transform_module_item =
           % newline
         ) %fmt "end" in
       let t =
-        (* comment (fmt "Type %s" *)
-        (*            (Atd_print.string_of_type_name name [expr] ann)) % newline *)
         string (String.capitalize name)
         %% colon %% signature %% equals %% structure
       in
