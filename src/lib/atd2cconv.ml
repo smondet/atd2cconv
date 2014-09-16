@@ -36,7 +36,6 @@ let (>>=) t f =
 
 let empty_atom = atom ()
 
-let not_implemented_placeholer = Out.fmt "Obj.magic 0"
 let not_implemented msg =
   `Error (`Not_implemented msg)
 
