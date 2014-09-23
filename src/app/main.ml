@@ -20,7 +20,9 @@ let () =
       "<file> \n\tOutput ML file (default: stdout)";
     ]) in
   let annons s = say "Dunno what to do with %S" s in
-  let usage = sprintf "%s [OPTIONS] <input.atd> <output.ml>" Sys.argv.(0) in
+  let usage =
+    sprintf "%s [OPTIONS] [-i <input.atd>] [-o <output.ml>]"
+      Sys.argv.(0) in
   Arg.parse options annons usage;
   let (i, closi), (o, closo) =
     Option.value_map ~default:(stdin, fun _ -> ()) !input 
