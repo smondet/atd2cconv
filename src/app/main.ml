@@ -5,13 +5,13 @@ let say fmt = Printf.(ksprintf (eprintf "%s\n%!") fmt)
 let failwithf fmt = Printf.(ksprintf failwith fmt)
 
 let () =
-  let inherit_variants = ref false in
+  let inherit_variants = ref true in
   let input = ref None in
   let output = ref None in
   let options = Arg.(align [
       "-inline-inherit-variants",
       Bool (fun v -> inherit_variants := v),
-      "<true|false> \n\tWrite inheriting variants inline (default: false)";
+      "<true|false> \n\tWrite inheriting variants inline (default: true)";
       "-i",
       String (fun s -> input := Some s),
       "<file> \n\tInput ATD file (default: stdin)";
