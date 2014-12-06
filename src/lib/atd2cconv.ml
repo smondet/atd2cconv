@@ -128,6 +128,7 @@ let transform_expr ~self_name ?from expr =
           %% unit_value
       in
       match t_name, from with
+      | "bool", _ -> ret3strings "bool" "bool_" "bool_"
       | "int", _ -> ret3strings "int" "int_" "int_"
       | "float", _ -> ret3strings "float" "float_" "float_"
       | "string", _ -> ret3strings "string" "string_" "string_"
