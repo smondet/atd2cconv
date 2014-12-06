@@ -1,0 +1,2 @@
+type members = bool list
+type test_tuple = (int * members)

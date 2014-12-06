@@ -1,0 +1,11 @@
+type start = [
+  | One
+  | Two of int
+  | Three of float
+  ]
+type variant = [
+  inherit start
+  | Four of string
+  | Five of bool
+  ]
+type test_tuple = (int * variant)

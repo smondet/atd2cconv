@@ -1,0 +1,2 @@
+type rank_opt = int option
+type test_tuple = (int * rank_opt)

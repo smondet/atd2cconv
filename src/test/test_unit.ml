@@ -1,0 +1,2 @@
+(* Test unit. *)
+let () = test () 
