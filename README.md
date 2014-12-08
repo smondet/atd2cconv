@@ -6,13 +6,16 @@ This a tiny library and an application transforming (a subset of possible)
 type definitions to OCaml modules that define
 [CConv](https://github.com/c-cube/cconv) sources and sinks.
 
+**Warning:** This version `0.0.0` generates code for `cconv` version **0.1**.
+
 
 Build
 -----
 
-    assemblage setup
+Just type:
+
     make
-    make test
+    make install BINDIR=/some/where/bin
 
 
 Usage
