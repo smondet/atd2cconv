@@ -1,4 +1,4 @@
-version  = "4660ec"
+version  = "0.0.0"
 requires = "atd nonstd smart_print"
 archive(byte) = "atd2cconv.cma"
 archive(byte, plugin) = "atd2cconv.cma"
