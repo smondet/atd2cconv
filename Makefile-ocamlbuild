@@ -23,5 +23,12 @@ install:
 	  _build/src/lib/atd2cconv.mli \
 	  META && cp atd2cconv $(BINDIR)
 
+test: byte
+	mkdir -p _build/test/ && \
+	./atd2cconv -i src/test/test1.atd -o _build/test/test1.ml && \
+	cat src/test/test1_header.ml _build/test/test1.ml src/test/test1_footer.ml > _build/test/test1_full.ml && \
+	ocamlfind ocamlc -package cconv.yojson -linkpkg _build/test/test1_full.ml -o _build/test/bouh && \
+	_build/test/bouh
+
 clean:
 	rm -fr _build atd2cconv
