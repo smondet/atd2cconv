@@ -21,7 +21,11 @@ install:
 	  _build/src/lib/atd2cconv.cmxa \
 	  _build/src/lib/atd2cconv.cmxs \
 	  _build/src/lib/atd2cconv.mli \
-	  META && cp atd2cconv $(BINDIR)
+	  META && mkdir -p $(BINDIR) && cp atd2cconv $(BINDIR)
+
+uninstall:
+	ocamlfind remove atd2cconv && \
+	  rm -f $(BINDIR)/atd2cconv
 
 test: byte
 	mkdir -p _build/test/ && \
