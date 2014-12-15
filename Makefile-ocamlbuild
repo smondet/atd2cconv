@@ -1,0 +1,34 @@
+
+.PHONY: all clean byte native top plugin
+
+all: byte lib
+
+byte: lib
+	ocamlfind ocamlc -thread -package atd,nonstd,smart_print -linkpkg \
+	  -I _build/src/lib/ atd2cconv.cma src/app/main.ml -o atd2cconv
+
+LIB_STUFF=src/lib/atd2cconv.cma src/lib/atd2cconv.cmxa src/lib/atd2cconv.cmxs 
+lib:
+	ocamlbuild -tag thread -use-ocamlfind -package atd,nonstd,smart_print $(LIB_STUFF)
+
+
+install:
+	ocamlfind install atd2cconv \
+	  _build/src/lib/atd2cconv.a \
+	  _build/src/lib/atd2cconv.cma \
+	  _build/src/lib/atd2cconv.cmi \
+	  _build/src/lib/atd2cconv.cmx \
+	  _build/src/lib/atd2cconv.cmxa \
+	  _build/src/lib/atd2cconv.cmxs \
+	  _build/src/lib/atd2cconv.mli \
+	  META && cp atd2cconv $(BINDIR)
+
+test: byte
+	mkdir -p _build/test/ && \
+	./atd2cconv -i src/test/test1.atd -o _build/test/test1.ml && \
+	cat src/test/test1_header.ml _build/test/test1.ml src/test/test1_footer.ml > _build/test/test1_full.ml && \
+	ocamlfind ocamlc -package cconv.yojson -linkpkg _build/test/test1_full.ml -o _build/test/bouh && \
+	_build/test/bouh
+
+clean:
+	rm -fr _build atd2cconv

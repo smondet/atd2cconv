@@ -1,0 +1,7 @@
+version  = "0.0.0"
+requires = "atd nonstd smart_print"
+archive(byte) = "atd2cconv.cma"
+archive(byte, plugin) = "atd2cconv.cma"
+archive(native) = "atd2cconv.cmxa"
+archive(native, plugin) = "atd2cconv.cmxs"
+exist_if = "atd2cconv.cma"
