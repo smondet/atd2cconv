@@ -46,7 +46,7 @@ Example
 -------
 
 The idea of `atd2cconv` (in contrast to `atdgen`) is to not use `Obj.magic`,
-ever, aAnd to make modules and types definitions more “standard” so that they
+ever, and to make modules and types definitions more “standard” so that they
 can be used more uniformly within functors and/or first class modules.
 
 ```ocaml
