@@ -129,6 +129,7 @@ let transform_expr ~self_name ?from expr =
       in
       match t_name, from with
       | "bool", _ -> ret3strings "bool" "bool_" "bool_"
+      | "unit", _ -> ret3strings "unit" "unit_" "unit_"
       | "int", _ -> ret3strings "int" "int_" "int_"
       | "float", _ -> ret3strings "float" "float_" "float_"
       | "string", _ -> ret3strings "string" "string_" "string_"
