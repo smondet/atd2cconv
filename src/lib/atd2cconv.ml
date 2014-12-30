@@ -144,7 +144,11 @@ let transform_expr ~self_name ?from expr =
     begin match t_args with
     | [] -> empty_atom
     | one :: more ->
-      let init = go_deep one in
+      let init =
+        go_deep one
+        >>= fun ~t ~source ~sink  ->
+        atom () ~t ~source:(parens source) ~sink:(parens sink)
+      in
       List.fold more ~init ~f:(fun prev arg_expr ->
           prev >>= fun ~t:t1 ~source:o1 ~sink:i1  ->
           go_deep arg_expr >>= fun ~t:t2 ~source:o2 ~sink:i2  ->
