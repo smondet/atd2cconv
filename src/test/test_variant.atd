@@ -1,0 +1,6 @@
+type variant = [
+  | One
+  | Two of int
+  | Three of float
+  ]
+type test_tuple = (int * variant)

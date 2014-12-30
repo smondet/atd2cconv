@@ -1,0 +1,11 @@
+type 'a basic_shapes = {
+  circle : 'a;
+  square : 'a;
+  rectangle : ('a * 'a);
+  }
+type 'a shape_record = {
+  inherit 'a basic_shapes;
+  triangle : ('a * 'a * 'a);
+  rhombus : ('a * 'a);
+}
+type 'a test_tuple = (int * 'a shape_record)

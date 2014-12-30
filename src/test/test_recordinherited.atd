@@ -1,0 +1,12 @@
+type basic_shapes = {
+  circle : float;
+  square : float;
+  rectangle : (float * float);
+  }
+type shape_record = {
+  inherit basic_shapes;
+  triangle : (float * float * float);
+  rhombus : (float * float);
+}
+
+type test_tuple = (int * shape_record)

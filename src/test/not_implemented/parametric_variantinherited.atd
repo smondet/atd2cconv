@@ -1,0 +1,12 @@
+type 'a start = [
+  | Circle of 'a
+  | Square of 'a
+  | Rectangle of ('a * 'a)
+  ]
+type 'a shape = [
+  inherit 'a start
+  | Rhombus of ('a * 'a)
+  | Triangle of ('a * 'a * 'a)
+  ]
+type 'a test_tuple = (int * 'a shape)
+  

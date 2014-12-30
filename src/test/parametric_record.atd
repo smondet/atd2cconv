@@ -1,0 +1,6 @@
+type 'a shape_record = {
+  circle : 'a;
+  square : 'a;
+  rectangle : ('a * 'a);
+  }
+type 'a test_tuple = (int * 'a shape_record)

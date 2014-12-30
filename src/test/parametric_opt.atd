@@ -1,0 +1,2 @@
+type 'a rank_opt = 'a option
+type 'a test_tuple = (int * 'a rank_opt)

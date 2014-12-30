@@ -1,0 +1,7 @@
+type 'a shape = [
+  | Circle of 'a
+  | Square of 'a
+  | Rectangle of ('a * 'a)
+  ]
+type 'a test_tuple = (int * 'a shape)
+  

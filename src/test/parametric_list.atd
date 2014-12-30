@@ -1,0 +1,2 @@
+type 'a elements = 'a list
+type 'a test_tuple = (int * 'a elements)
