@@ -4,3 +4,10 @@ type 'a shape_record = {
   rectangle : ('a * 'a);
   }
 type 'a test_tuple = (int * 'a shape_record)
+
+(* complexification of the test to reach the case in issue #9:
+   https://github.com/smondet/atd2cconv/issues/9 *)
+type t_simple = [ Bouh | Bah ]
+type application = [ Foo of t_simple shape_record ]
+
+
