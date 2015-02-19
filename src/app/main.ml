@@ -6,12 +6,17 @@ let failwithf fmt = Printf.(ksprintf failwith fmt)
 
 let () =
   let inherit_variants = ref true in
+  let sort = ref true in
   let input = ref None in
   let output = ref None in
   let options = Arg.(align [
       "-inline-inherit-variants",
       Bool (fun v -> inherit_variants := v),
       "<true|false> \n\tWrite inheriting variants inline (default: true)";
+      "-sort",
+      Bool (fun v -> sort := v),
+      "<true|false> \n\tSort the type-definitions (with `Atd_util.tsort`, \
+       default: true)";
       "-i",
       String (fun s -> input := Some s),
       "<file> \n\tInput ATD file (default: stdin)";
@@ -35,11 +40,12 @@ let () =
       ~inherit_variants:!inherit_variants i in
   let (full_module, original_types) = atd in
   let (head, body) = full_module in
-  let sorted = Atd_util.tsort body in
+  let to_process =
+    if !sort then Atd_util.tsort body else [true, body] in
   let doc =
     let open SmartPrint in
     try
-      List.fold sorted ~init:(empty) ~f:(fun prev (recur, mod_body) ->
+      List.fold to_process ~init:(empty) ~f:(fun prev (recur, mod_body) ->
           prev ^^ string "module rec "
           ^^ separate (newline ^^ string "and" ^^ newline)
             (List.map mod_body ~f:(fun item ->
